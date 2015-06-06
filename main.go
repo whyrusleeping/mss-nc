@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,7 +13,7 @@ import (
 
 func writeDelimited(w io.Writer, data []byte) error {
 	buf := make([]byte, 8)
-	n := binary.PutUvarint(buf, uint64(len(data)))
+	n := binary.PutUvarint(buf, uint64(len(data)+1))
 	_, err := w.Write(buf[:n])
 	if err != nil {
 		return err
@@ -56,14 +57,12 @@ func readDelimited(r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 
-	nline, err := br.ReadByte()
-	if err != nil {
-		return nil, err
+	if len(buf) == 0 || buf[length-1] != '\n' {
+		return nil, errors.New("message did not have trailing newline")
 	}
 
-	if nline != '\n' {
-		panic("oh my god oh my god oh my god oh my god")
-	}
+	// slice off the trailing newline
+	buf = buf[:length-1]
 
 	return buf, nil
 }
