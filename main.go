@@ -11,6 +11,78 @@ import (
 	"os"
 )
 
+func main() {
+	if len(os.Args) < 3 {
+		fmt.Printf("usage: %s <host> <port>\n")
+		return
+	}
+
+	con, err := net.Dial("tcp", fmt.Sprintf("%s:%s", os.Args[1], os.Args[2]))
+	if err != nil {
+		fmt.Println("error: ", err)
+		return
+	}
+
+	// Read server hello
+	line, err := readDelimited(con)
+	if err != nil {
+		fmt.Println("error: ", err)
+		return
+	}
+
+	fmt.Println(string(line))
+
+	scan := bufio.NewScanner(os.Stdin)
+	for scan.Scan() {
+		if scan.Err() != nil {
+			fmt.Println("error: ", scan.Err())
+			return
+		}
+
+		err := writeDelimited(con, scan.Bytes())
+		if err != nil {
+			fmt.Println("error: ", err)
+			return
+		}
+
+		line, err := readDelimited(con)
+		if err != nil {
+			fmt.Println("error: ", err)
+			return
+		}
+
+		switch scan.Text() {
+		case "ls":
+			// ls has a special response format
+			r := bytes.NewReader(line)
+			for {
+				p, err := readDelimited(r)
+				if err != nil {
+					break
+				}
+
+				fmt.Println(string(p))
+			}
+		default:
+			fmt.Println(string(line))
+			if line[0] == '/' {
+				go func() {
+					_, err := io.Copy(os.Stdout, con)
+					if err != nil {
+						fmt.Printf("read error: %s", err)
+					}
+				}()
+				_, err := io.Copy(con, os.Stdin)
+				if err != nil {
+					fmt.Printf("write error: %s", err)
+				}
+				return
+			}
+		}
+	}
+}
+
+// writeDelimited writes a varint-length-prefixed-newline-terminated message
 func writeDelimited(w io.Writer, data []byte) error {
 	buf := make([]byte, 8)
 	n := binary.PutUvarint(buf, uint64(len(data)+1))
@@ -65,66 +137,4 @@ func readDelimited(r io.Reader) ([]byte, error) {
 	buf = buf[:length-1]
 
 	return buf, nil
-}
-
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Printf("usage: %s <host> <port>\n")
-		return
-	}
-
-	con, err := net.Dial("tcp", fmt.Sprintf("%s:%s", os.Args[1], os.Args[2]))
-	if err != nil {
-		fmt.Println("error: ", err)
-		return
-	}
-
-	line, err := readDelimited(con)
-	if err != nil {
-		fmt.Println("error: ", err)
-		return
-	}
-
-	fmt.Println(string(line))
-
-	scan := bufio.NewScanner(os.Stdin)
-	for scan.Scan() {
-		if scan.Err() != nil {
-			fmt.Println("error: ", scan.Err())
-			return
-		}
-
-		err := writeDelimited(con, scan.Bytes())
-		if err != nil {
-			fmt.Println("error: ", err)
-			return
-		}
-
-		line, err := readDelimited(con)
-		if err != nil {
-			fmt.Println("error: ", err)
-			return
-		}
-
-		switch scan.Text() {
-		case "ls":
-			// ls has a special response format
-			r := bytes.NewReader(line)
-			for {
-				p, err := readDelimited(r)
-				if err != nil {
-					break
-				}
-
-				fmt.Println(string(p))
-			}
-		default:
-			fmt.Println(string(line))
-			if line[0] == '/' {
-				go io.Copy(os.Stdout, con)
-				io.Copy(con, os.Stdin)
-				return
-			}
-		}
-	}
 }
