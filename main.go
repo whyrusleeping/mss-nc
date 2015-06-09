@@ -11,6 +11,8 @@ import (
 	"os"
 )
 
+const ProtocolID = "/multistream/version1.0.0"
+
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Printf("usage: %s <host> <port>\n")
@@ -31,6 +33,12 @@ func main() {
 	}
 
 	fmt.Println(string(line))
+
+	err = writeDelimited(con, []byte(ProtocolID))
+	if err != nil {
+		fmt.Println("error: ", err)
+		return
+	}
 
 	scan := bufio.NewScanner(os.Stdin)
 	for scan.Scan() {
