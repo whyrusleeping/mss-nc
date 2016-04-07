@@ -11,7 +11,7 @@ import (
 	"os"
 )
 
-const ProtocolID = "/multistream/version1.0.0"
+const ProtocolID = "/multistream/1.0.0"
 
 func main() {
 	if len(os.Args) < 3 {
