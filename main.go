@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -14,12 +15,44 @@ import (
 const ProtocolID = "/multistream/1.0.0"
 
 func main() {
+	listen := flag.Bool("l", false, "listen on a port")
+	flag.Parse()
+
 	if len(os.Args) < 3 {
 		fmt.Printf("usage: %s <host> <port>\n")
 		return
 	}
 
+	if *listen {
+		list, err := net.Listen("tcp", ":"+os.Args[2])
+		if err != nil {
+			fmt.Println("error: ", err)
+			return
+		}
+
+		con, err := list.Accept()
+		if err != nil {
+			fmt.Println("error: ", err)
+			return
+		}
+
+		fmt.Println("GOT CONN")
+
+		doNC(con)
+		return
+	}
+
 	con, err := net.Dial("tcp", fmt.Sprintf("%s:%s", os.Args[1], os.Args[2]))
+	if err != nil {
+		fmt.Println("error: ", err)
+		return
+	}
+
+	doNC(con)
+}
+
+func doNC(con net.Conn) {
+	err := writeDelimited(con, []byte(ProtocolID))
 	if err != nil {
 		fmt.Println("error: ", err)
 		return
@@ -33,12 +66,6 @@ func main() {
 	}
 
 	fmt.Println(string(line))
-
-	err = writeDelimited(con, []byte(ProtocolID))
-	if err != nil {
-		fmt.Println("error: ", err)
-		return
-	}
 
 	scan := bufio.NewScanner(os.Stdin)
 	for scan.Scan() {
