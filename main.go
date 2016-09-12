@@ -10,21 +10,24 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 )
 
 const ProtocolID = "/multistream/1.0.0"
 
+var listen *bool = flag.Bool("l", false, "listen on a port")
+var verbose *bool = flag.Bool("v", false, "verbose output")
+
 func main() {
-	listen := flag.Bool("l", false, "listen on a port")
 	flag.Parse()
 
-	if len(os.Args) < 3 {
-		fmt.Printf("usage: %s <host> <port>\n")
+	if len(flag.Args()) < 2 {
+		fmt.Printf("usage: %s <host> <port>\n", os.Args[0])
 		return
 	}
 
 	if *listen {
-		list, err := net.Listen("tcp", ":"+os.Args[2])
+		list, err := net.Listen("tcp", ":"+flag.Args()[1])
 		if err != nil {
 			fmt.Println("error: ", err)
 			return
@@ -42,7 +45,7 @@ func main() {
 		return
 	}
 
-	con, err := net.Dial("tcp", fmt.Sprintf("%s:%s", os.Args[1], os.Args[2]))
+	con, err := net.Dial("tcp", fmt.Sprintf("%s:%s", flag.Args()[0], flag.Args()[1]))
 	if err != nil {
 		fmt.Println("error: ", err)
 		return
@@ -51,7 +54,26 @@ func main() {
 	doNC(con)
 }
 
+func OutPrintf(f string, a ...interface{}) {
+	if *verbose {
+		fmt.Printf("> "+f, a...)
+	}
+}
+func InPrintf(f string, a ...interface{}) {
+	if *verbose {
+		fmt.Printf("< "+f, a...)
+	} else {
+		fmt.Printf(f, a...)
+	}
+}
+func VPrintf(f string, a ...interface{}) {
+	if *verbose {
+		fmt.Printf(f, a...)
+	}
+}
+
 func doNC(con net.Conn) {
+	OutPrintf("%s\n", ProtocolID)
 	err := writeDelimited(con, []byte(ProtocolID))
 	if err != nil {
 		fmt.Println("error: ", err)
@@ -65,9 +87,11 @@ func doNC(con net.Conn) {
 		return
 	}
 
-	fmt.Println(string(line))
+	InPrintf("%s\n", string(line))
 
 	scan := bufio.NewScanner(os.Stdin)
+
+	VPrintf("> ")
 	for scan.Scan() {
 		if scan.Err() != nil {
 			fmt.Println("error: ", scan.Err())
@@ -89,8 +113,15 @@ func doNC(con net.Conn) {
 		switch scan.Text() {
 		case "ls":
 			// ls has a special response format
-			r := bytes.NewReader(line)
-			for {
+			// readd new line
+			r := bytes.NewReader([]byte(string(line) + "\n"))
+			br := &byteReader{r}
+			count, err := binary.ReadUvarint(br)
+			if err != nil {
+				break
+			}
+
+			for i := uint64(0); i < count; i++ {
 				p, err := readDelimited(r)
 				if err != nil {
 					break
@@ -99,8 +130,16 @@ func doNC(con net.Conn) {
 				fmt.Println(string(p))
 			}
 		default:
-			fmt.Println(string(line))
-			if line[0] == '/' {
+			InPrintf("%s\n", string(line))
+			oldline := line
+			line, err := readDelimited(con)
+
+			if err == nil && strings.TrimSpace(string(line)) == ProtocolID {
+				writeDelimited(con, []byte(ProtocolID))
+				InPrintf("%s\n", ProtocolID)
+				OutPrintf("%s\n", ProtocolID)
+			} else if oldline[0] == '/' {
+				writeDelimited(os.Stdout, line)
 				go func() {
 					_, err := io.Copy(os.Stdout, con)
 					if err != nil {
@@ -114,6 +153,7 @@ func doNC(con net.Conn) {
 				return
 			}
 		}
+		VPrintf("> ")
 	}
 }
 
