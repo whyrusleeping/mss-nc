@@ -7,6 +7,6 @@ usage:
 $ mss-nc <host> <port>
 ```
 
-Once youre connected, you can either list available protocols with `ls` or you
+Once you're connected, you can either list available protocols with `ls` or you
 can select a protocol by typing its name. Once a protocol is selected, the input
 mode changes from varint prefixed and newline delimited to raw.
